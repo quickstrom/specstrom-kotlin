@@ -7,7 +7,9 @@ sealed interface Value {
     @JvmInline value class ListVal(val elements: List<Value>) : Value
     @JvmInline value class RecordVal(val elements: Map<String, Value>) : Value
     data class Con(val name: String, val elements: List<Value>) : Value
-    data class Closure(val scope: Scope, val binding: Pattern, val body: Expr, var metadata : BindingData?) : Value
+    data class Closure(val scope: Scope, val binding: Pattern, val body: Expr) : Value {
+        var metadata : BindingData? = null
+    }
     data class Thunk(val scope: Scope, val body: Expr, val cacheIndex: Int, var metadata : BindingData) : Value
     object Null : Value
 }

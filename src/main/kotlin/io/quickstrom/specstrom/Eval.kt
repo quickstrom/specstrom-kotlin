@@ -123,7 +123,7 @@ class Eval(e : Expr) {
                         }
                     }
                     is Expr.Lambda -> {
-                        value = Value.Closure(this.env,e.binding, e.body, null)
+                        value = Value.Closure(this.env,e.binding, e.body)
                         expr = null
                         mode = Mode.RETURN
                     }
