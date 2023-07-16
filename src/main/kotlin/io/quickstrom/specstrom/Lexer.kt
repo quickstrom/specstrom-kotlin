@@ -4,11 +4,41 @@ import java.io.BufferedReader
 import java.io.PushbackReader
 import java.io.Reader
 
-class Lexer(reader : Reader) : Iterator<Tok> {
-    private val reader : PushbackReader = PushbackReader(BufferedReader(reader))
+
+
+class Lexer(filename : String, reader : Reader) : Iterator<Tok> {
+    class PositionedReader(var pos : Positioned.Position, reader : Reader) {
+        private val reader : PushbackReader = PushbackReader(BufferedReader(reader))
+        var oldCol = 0
+        fun read() : Int {
+            val x = reader.read()
+            if (x == -1 || x == 65535) { return -1 }
+            if (x == '\n'.code) {
+                pos.row += 1
+                oldCol = pos.col
+                pos.col = 1
+            } else {
+                oldCol = pos.col
+                pos.col += 1
+            }
+            return x
+        }
+        fun unread(c : Int) {
+            reader.unread(c)
+            if (c == '\n'.code) {
+                pos.row -= 1
+                pos.col = oldCol
+                oldCol = 0 //this is a bug if we backtrack too much, but shouldn't happen
+            } else {
+                pos.col -= 1
+                oldCol = 0
+            }
+        }
+    }
+    private val reader = PositionedReader(Positioned.Position(filename,1,1), reader)
     override fun hasNext(): Boolean {
         val x = reader.read()
-        if (x < 0 || x == 65535) return false
+        if (x < 0) return false
         reader.unread(x)
         return true
     }
@@ -86,6 +116,7 @@ class Lexer(reader : Reader) : Iterator<Tok> {
     }
     override fun next(): Tok {
         skipWhitespace()
-        return lexInteger() ?: lexParens() ?: lexSingleIdent() ?: lexAlphaIdent() ?: lexSymbolIdent() ?: Tok.Unknown(reader.read().toChar())
+        val pos = Positioned.Position(reader.pos.file,reader.pos.row,reader.pos.col)
+        return (lexInteger() ?: lexParens() ?: lexSingleIdent() ?: lexAlphaIdent() ?: lexSymbolIdent() ?: Tok.Unknown(reader.read().toChar())).at(pos)
     }
 }

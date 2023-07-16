@@ -67,6 +67,7 @@ class Parser(syntax : SortedMap<Int,List<SyntaxRule>>) {
     val comma = TerminalSymbol(Tok.Ident(","))
     val lBrace = TerminalSymbol(Tok.Ident("{"))
     val rBrace = TerminalSymbol(Tok.Ident("}"))
+    val tilde = TerminalSymbol(Tok.Ident("~"))
     val lBracket = TerminalSymbol(Tok.Ident("["))
     val rBracket = TerminalSymbol(Tok.Ident("]"))
     val colon = TerminalSymbol(Tok.Ident(":"))
@@ -84,6 +85,7 @@ class Parser(syntax : SortedMap<Int,List<SyntaxRule>>) {
         grammar.addRule(basicExpr,lBracket,exprList,rBracket)
         grammar.addRule(basicExpr,lBrace,fieldList,rBrace)
         grammar.addRule(basicExpr,basicExpr,lParen, exprList, rParen)
+        grammar.addRule(basicExpr,tilde,identifier)
         grammar.addRule(basicExpr,funKwd,lParen,exprList,rParen,lBrace,anyExpr, rBrace)
         var lowerNonterminal = basicExpr
         for ((k,rules) in syntax) {
@@ -113,17 +115,21 @@ class Parser(syntax : SortedMap<Int,List<SyntaxRule>>) {
         }
         val name = StringBuilder()
         val args : MutableList<Expr> = mutableListOf()
+        var pos : Positioned.Position? = null
         for (c in cur.children) {
             if (c.token == null) {
                 name.append('_')
                 args.add(fromAnyExpr(c))
             } else {
                 name.append(c.token.value)
+                if (pos == null) {
+                    pos = (c.token as Tok).position
+                }
             }
         }
-        var func : Expr = Expr.Var(name.toString())
+        var func : Expr = Expr.Var(name.toString()).at(pos)
         for (arg in args) {
-            func = Expr.App(func, arg)
+            func = Expr.App(func, arg).at(func.position)
         }
         return func
 
@@ -155,28 +161,34 @@ class Parser(syntax : SortedMap<Int,List<SyntaxRule>>) {
         when (pt.children.size) {
             1 -> { // literal
                 return when (val v = pt.children[0].token) {
-                    is Tok.IntLit -> Expr.IntLit(v.value)
-                    else -> Expr.Var(pt.children[0].token.value)
+                    is Tok.IntLit -> Expr.IntLit(v.value).at(v.position)
+                    else -> Expr.Var(pt.children[0].token.value).at((v as Tok).position)
                 }
             }
-            2 -> { //constructor literal
-                return Expr.ConLit(pt.children[1].token.value, listOf())
+            2 -> { //constructor literal or lazy pattern
+                if (pt.children[0].symbol == colon) {
+                    return Expr.ConLit(pt.children[1].token.value, listOf()).at((pt.children[0].token as Tok).position)
+                } else {
+                    return Expr.App(Expr.Var("~_").at((pt.children[0].token as Tok).position),
+                                    Expr.Var(pt.children[1].token.value).at((pt.children[1].token as Tok).position))
+                        .at((pt.children[0].token as Tok).position)
+                }
             }
             3 -> { // list or record literal
                 return if (pt.children[1].symbol == exprList) {
-                    Expr.ListLit(fromExprList(pt.children[1]))
+                    Expr.ListLit(fromExprList(pt.children[1])).at((pt.children[0].token as Tok).position)
                 } else {
-                    Expr.RecordLit(fromFieldList(pt.children[1]))
+                    Expr.RecordLit(fromFieldList(pt.children[1])).at((pt.children[0].token as Tok).position)
                 }
             }
             4 -> { // function application
                 var func = fromBasicExpr(pt.children[0])
                 val args = fromExprList(pt.children[2])
                 if (func is Expr.ConLit) {
-                    func = Expr.ConLit(func.name,func.elements + args)
+                    func = Expr.ConLit(func.name,func.elements + args).at(func.position)
                 } else {
                     for (arg in args) {
-                        func = Expr.App(func, arg)
+                        func = Expr.App(func, arg).at(func.position)
                     }
                 }
                 return func
@@ -185,11 +197,21 @@ class Parser(syntax : SortedMap<Int,List<SyntaxRule>>) {
                 val args = fromExprList(pt.children[2])
                 var body = fromAnyExpr(pt.children[5])
                 for (arg in args) {
-                    body = Expr.Lambda(exprToStrictPattern(arg),body)
+                    body = Expr.Lambda(exprToPattern(arg),body).at((pt.children[0].token as Tok).position)
                 }
                 return body
             }
             else -> throw Exception()
+        }
+    }
+    fun exprToPattern(exp : Expr) : Pattern {
+        return if (exp is Expr.App && exp.left is Expr.Var && exp.right is Expr.Var
+            && exp.left.name == "~_") {
+            val ret = Pattern.LazyPattern(exp.right.name)
+            ret.position = exp.left.position
+            ret
+        } else {
+            exprToStrictPattern(exp)
         }
     }
     fun exprToStrictPattern(exp : Expr) : Pattern.StrictPattern {
@@ -206,7 +228,7 @@ class Parser(syntax : SortedMap<Int,List<SyntaxRule>>) {
                     put(x,exprToStrictPattern(y))
                 }
             })
-        }
+        }.at(exp.position)
     }
     fun fn(lex : Lexer) : Expr {
         println(grammar.rules.toString())

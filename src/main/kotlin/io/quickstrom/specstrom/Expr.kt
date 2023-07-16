@@ -10,4 +10,9 @@ sealed class Expr : Positioned() {
     data class App(val left: Expr, val right: Expr) : Expr()
     data class Lambda(val binding: Pattern, val body: Expr) : Expr()
     data class Var(val name: String) : Expr()
+
+    fun at(pos : Position?) : Expr {
+        position = pos
+        return this
+    }
 }

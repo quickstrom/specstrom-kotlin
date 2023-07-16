@@ -3,7 +3,7 @@ import java.io.File
 import java.io.FileReader
 
 fun main(args: Array<String>) {
-    val lex = Lexer(FileReader(File("test.strom")))
+    val lex = Lexer("test.strom",FileReader(File("test.strom")))
     val p = Parser(sortedMapOf(
         0 to listOf (Parser.SyntaxRule("_+_",Parser.Assoc.Left))
     ))

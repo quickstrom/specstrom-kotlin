@@ -2,6 +2,12 @@ package io.quickstrom.specstrom
 import org.nineml.coffeegrinder.tokens.Token;
 sealed abstract class Tok : Token(listOf()) {
 
+    var position : Positioned.Position? = null
+    fun at(pos : Positioned.Position) : Tok {
+        position = pos
+        return this
+    }
+
     sealed abstract class TokSelector : Token(listOf()) {
         object AnyIdent : TokSelector() {
             override fun matches(input: Token?): Boolean {

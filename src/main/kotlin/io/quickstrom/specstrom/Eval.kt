@@ -27,7 +27,7 @@ class Eval(e : Expr) {
                 } else {
                     to[pat.name] = value
                     if (value is Value.Closure) {
-                        value.metadata = Value.BindingData(pat.name,pat.pos)
+                        value.metadata = Value.BindingData(pat.name,pat.position)
                     }
                     true
                 }
@@ -178,7 +178,7 @@ class Eval(e : Expr) {
                                         val hm : MutableMap<String,Value> =
                                             mutableMapOf(func.binding.name to
                                                     Value.Thunk(env, f.right, thunkCache.size,
-                                                        Value.BindingData(func.binding.name,func.binding.pos)))
+                                                        Value.BindingData(func.binding.name,func.binding.position)))
                                         thunkCache.add(null)
                                         stack.addLast(Frame.FunCallFrame (env,func.metadata))
                                         env = Scope (hm, func.scope)
