@@ -75,35 +75,28 @@ class Lexer(filename : String, reader : Reader) : Iterator<Tok> {
             else -> { reader.unread(v); null }
         }
     }
-    private fun lexAlphaIdent(): Tok? {
+    private fun lexIdent(): Tok? {
         val b = StringBuilder()
         var v: Int
+        var type = 0;
         while (true) {
             v = reader.read()
             if (v < 0) break
             val c = v.toChar()
-            if (c.isLetterOrDigit() || c in "_'!?@#$") {
+            if (c == '_') {
+                type = 0
                 b.append(c)
+            } else if (type <= 0 && (c.isLetterOrDigit() || c in "'!?@#$")) {
+                b.append(c)
+                type = -1;
+            } else if (type >= 0 && !(c.isWhitespace() || c in "[]{};," || c in "()\"\'`")) {
+                b.append(c)
+                type = 1;
             } else break
         }
         reader.unread(v)
         return if (b.isEmpty()) null else Tok.Ident(b.toString())
     }
-    private fun lexSymbolIdent(): Tok? {
-        val b = StringBuilder()
-        var v: Int
-        while (true) {
-            v = reader.read()
-            if (v < 0) break
-            val c = v.toChar()
-            if (!(c.isWhitespace() || c.isLetterOrDigit() || c in "[]{};," || c in "()\"\'`")) {
-                b.append(c)
-            } else break
-        }
-        reader.unread(v)
-        return if (b.isEmpty()) null else Tok.Ident(b.toString())
-    }
-
     private fun skipWhitespace() {
         var v: Int
         while (true) {
@@ -117,6 +110,6 @@ class Lexer(filename : String, reader : Reader) : Iterator<Tok> {
     override fun next(): Tok {
         skipWhitespace()
         val pos = Positioned.Position(reader.pos.file,reader.pos.row,reader.pos.col)
-        return (lexInteger() ?: lexParens() ?: lexSingleIdent() ?: lexAlphaIdent() ?: lexSymbolIdent() ?: Tok.Unknown(reader.read().toChar())).at(pos)
+        return (lexInteger() ?: lexParens() ?: lexSingleIdent() ?: lexIdent() ?: Tok.Unknown(reader.read().toChar())).at(pos)
     }
 }

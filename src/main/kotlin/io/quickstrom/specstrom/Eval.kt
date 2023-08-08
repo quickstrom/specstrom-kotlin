@@ -1,7 +1,52 @@
 package io.quickstrom.specstrom
 
+fun match(to : MutableMap<String,Value>, pat : Pattern.StrictPattern, value : Value) : Boolean {
+    when (pat) {
+        is Pattern.Var -> {
+            return if (to.containsKey(pat.name)) {
+                throw Exception()
+            } else {
+                to[pat.name] = value
+                if (value is Value.Closure) {
+                    value.metadata = Value.BindingData(pat.name,pat.position)
+                }
+                true
+            }
+        }
+        is Pattern.IntLit ->
+            return value is Value.IntVal && value.value == pat.value
+        is Pattern.BoolLit ->
+            return value is Value.BoolVal && value.value == pat.value
+        is Pattern.ListLit -> {
+            if (value is Value.ListVal) {
+                if (pat.elements.size != value.elements.size) return false
+                for ((x,y) in pat.elements.zip(value.elements)) {
+                    if (!match(to,x,y)) return false
+                }
+            } else return false
+        }
+        is Pattern.Con -> {
+            if (value is Value.Con && value.name == pat.conName) {
+                if (pat.elements.size != value.elements.size) return false
+                for ((x,y) in pat.elements.zip(value.elements)) {
+                    if (!match(to,x,y)) return false
+                }
+            } else return false
+        }
+        is Pattern.Record -> {
+            if (value is Value.RecordVal) {
+                for ((k,v) in pat.elements) {
+                    val subValue = value.elements[k] ?: return false
+                    if (!match(to,v,subValue))
+                        return false
+                }
+            } else return false
+        }
+    }
+    return true
+}
 
-class Eval(e : Expr) {
+class Eval(e : Expr, env: Scope, thunkCache : MutableList<Value?>) {
     enum class Mode {
         EVAL,
         RETURN,
@@ -17,53 +62,8 @@ class Eval(e : Expr) {
     var value: Value? = null
     var mode: Mode = Mode.EVAL
     val stack: ArrayDeque<Frame> = ArrayDeque()
-    var env: Scope = Scope(mutableMapOf(),null)
-    val thunkCache: MutableList<Value?> = mutableListOf()
-    private fun match(to : MutableMap<String,Value>, pat : Pattern.StrictPattern, value : Value) : Boolean {
-        when (pat) {
-            is Pattern.Var -> {
-                return if (to.containsKey(pat.name)) {
-                    throw Exception()
-                } else {
-                    to[pat.name] = value
-                    if (value is Value.Closure) {
-                        value.metadata = Value.BindingData(pat.name,pat.position)
-                    }
-                    true
-                }
-            }
-            is Pattern.IntLit ->
-                return value is Value.IntVal && value.value == pat.value
-            is Pattern.BoolLit ->
-                return value is Value.BoolVal && value.value == pat.value
-            is Pattern.ListLit -> {
-                if (value is Value.ListVal) {
-                    if (pat.elements.size != value.elements.size) return false
-                    for ((x,y) in pat.elements.zip(value.elements)) {
-                        if (!this.match(to,x,y)) return false
-                    }
-                } else return false
-            }
-            is Pattern.Con -> {
-                if (value is Value.Con && value.name == pat.conName) {
-                    if (pat.elements.size != value.elements.size) return false
-                    for ((x,y) in pat.elements.zip(value.elements)) {
-                        if (!match(to,x,y)) return false
-                    }
-                } else return false
-            }
-            is Pattern.Record -> {
-                if (value is Value.RecordVal) {
-                    for ((k,v) in pat.elements) {
-                        val subValue = value.elements[k] ?: return false
-                        if (!match(to,v,subValue))
-                            return false
-                    }
-                } else return false
-            }
-        }
-        return true
-    }
+    var env: Scope = Scope(mutableMapOf(),env)
+    val thunkCache: MutableList<Value?> = thunkCache
 
     fun execute() {
         while (true) when (mode) {
@@ -171,6 +171,13 @@ class Eval(e : Expr) {
                     }
                     is Frame.AppFrameLeft -> {
                         when (val func = this.value) {
+                            is Value.ValOp -> {
+                                stack.removeLast()
+                                stack.addLast(Frame.AppFrameRight(func))
+                                expr = f.right
+                                mode = Mode.EVAL
+                                value = null
+                            }
                             is Value.Closure -> {
                                 when (func.binding) {
                                     is Pattern.LazyPattern -> {
@@ -208,19 +215,21 @@ class Eval(e : Expr) {
                     is Frame.AppFrameRight -> {
                         if (f.left is Value.Closure && f.left.binding is Pattern.StrictPattern) {
                             stack.removeLast()
-                            val hm : MutableMap<String, Value> = mutableMapOf()
+                            val hm: MutableMap<String, Value> = mutableMapOf()
                             val success = match(hm, f.left.binding, value!!)
                             if (!success) {
                                 value = Value.Null
                             } else {
                                 //TODO: TCO?
-                                stack.addLast(Frame.FunCallFrame(env,f.left.metadata))
+                                stack.addLast(Frame.FunCallFrame(env, f.left.metadata))
                                 env = Scope(hm, f.left.scope)
                                 expr = f.left.body
                                 value = null
                                 mode = Mode.EVAL
                             }
-
+                        } else if (f.left is Value.ValOp) {
+                            stack.removeLast()
+                            value = f.left.applyTo(value!!)
                         } else {
                             mode = Mode.ERROR
                             error = Error.Unknown // shouldn't happen

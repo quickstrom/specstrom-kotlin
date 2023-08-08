@@ -5,8 +5,8 @@ data class Scope(val bindings: MutableMap<String, Value>, val next: Scope?) {
         var x: Value? = null
         var it : Scope? = this
         while (it != null && x == null) {
-            x = bindings[id]
-            it = next
+            x = it.bindings[id]
+            it = it.next
         }
         return x
     }

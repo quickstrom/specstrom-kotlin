@@ -5,6 +5,7 @@ sealed abstract class Tok : Token(listOf()) {
     var position : Positioned.Position? = null
     fun at(pos : Positioned.Position) : Tok {
         position = pos
+
         return this
     }
 

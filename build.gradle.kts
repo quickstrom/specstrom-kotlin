@@ -15,7 +15,7 @@ repositories {
 
 dependencies {
     testImplementation(kotlin("test"))
-    implementation("org.nineml:coffeegrinder:3.0.0e")
+    implementation("org.nineml:coffeegrinder:3.2.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 }
 
